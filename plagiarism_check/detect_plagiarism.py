@@ -1,5 +1,7 @@
 import os
 import subprocess
+from pathlib import Path
+from tqdm import tqdm
 from copydetect import CopyDetector
 
 # --- CONFIGURATION ---
@@ -9,29 +11,53 @@ REPORT_OUTPUT = "./plagiarism_report.html"
 
 def prepare_files():
     print("Step 1: Converting Notebooks to Scripts...")
-    # This finds every .ipynb in every subfolder and creates a .py version next to it
-    subprocess.run(["jupyter", "nbconvert", "--to", "script", f"{SUBMISSIONS_DIR}/**/*.ipynb"], check=True)
-    subprocess.run(["jupyter", "nbconvert", "--to", "script", SKELETON_FILE], check=True)
+    
+    # 1. Convert the skeleton file first (silently)
+    subprocess.run(
+        ["jupyter", "nbconvert", "--to", "script", SKELETON_FILE],
+        stdout=subprocess.DEVNULL, 
+        stderr=subprocess.DEVNULL,
+        check=True
+    )
+
+    # 2. Find all student notebooks in all subfolders
+    notebooks = list(Path(SUBMISSIONS_DIR).rglob("*.ipynb"))
+    
+    if not notebooks:
+        print(f"No .ipynb files found in {SUBMISSIONS_DIR}")
+        return False
+
+    # 3. Convert them one by one with a progress bar
+    for nb in tqdm(notebooks, desc="Converting", unit="file", leave=True):
+        subprocess.run(
+            ["jupyter", "nbconvert", "--to", "script", str(nb)],
+            stdout=subprocess.DEVNULL, # Suppresses standard output
+            stderr=subprocess.DEVNULL, # Suppresses error/warning noise
+            check=True
+        )
+    return True
 
 def run_detection():
-    print("Step 2: Running Copydetect...")
-    # Initialize detector
-    # noise_t: minimum characters to flag (smaller = stricter)
-    # display_t: only show pairs with >30% similarity
+    print("\nStep 2: Running Copydetect...")
+    
     detector = CopyDetector(
         test_dirs=[SUBMISSIONS_DIR],
-        boilerplate_dirs=[os.path.dirname(SKELETON_FILE)],
+        boilerplate_dirs=[os.path.dirname(SKELETON_FILE) if os.path.dirname(SKELETON_FILE) else "."],
         extensions=["py"],
         noise_t=25, 
         display_t=0.30, 
         out_file=REPORT_OUTPUT
     )
     
-    detector.add_file(SKELETON_FILE.replace(".ipynb", ".py"), "boilerplate")
+    skeleton_py = SKELETON_FILE.replace(".ipynb", ".py")
+    detector.add_file(skeleton_py, "boilerplate")
+    
     detector.run()
-    detector.generate_report()
-    print(f"Finished! Open {REPORT_OUTPUT} to see results.")
+    
+    # FIXED: Correct method name
+    detector.generate_html_report() 
+    print(f"\nFinished! Open {REPORT_OUTPUT}.html to see results.")
 
 if __name__ == "__main__":
-    prepare_files()
-    run_detection()
+    if prepare_files():
+        run_detection()
