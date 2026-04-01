@@ -21,8 +21,11 @@ def clean_jupyter_noise(filepath):
     except Exception as e:
         pass # Skip if file can't be read
 
-def prepare_files(submissions_dir, boilerplate_dir, force_reconvert=False):
-    print(f"Step 1: Converting Notebooks to Scripts {'(FORCE MODE)' if force_reconvert else '(Skipping existing)'}...")
+def prepare_files(submissions_dir, boilerplate_dir, output_format="py", force_reconvert=False):
+    if output_format == "md":
+        print(f"Step 1: Converting Notebooks to Markdown {'(FORCE MODE)' if force_reconvert else '(Skipping existing)'}...")
+    else:
+        print(f"Step 1: Converting Notebooks to Scripts {'(FORCE MODE)' if force_reconvert else '(Skipping existing)'}...")
     
     # 1. Convert and clean the skeleton file
     skeleton_notebooks = list(Path(boilerplate_dir).glob("*.ipynb"))
@@ -38,13 +41,22 @@ def prepare_files(submissions_dir, boilerplate_dir, force_reconvert=False):
 
     skeleton_path = skeleton_notebooks[0]
 
-    skeleton_py = skeleton_path.with_suffix('.py')
-    if force_reconvert or not skeleton_py.exists():
+    if output_format == "md":
+        target_suffix = ".md"
+        convert_to = "markdown"
+    else:
+        target_suffix = ".py"
+        convert_to = "script"
+
+    skeleton_target = skeleton_path.with_suffix(target_suffix)
+    if force_reconvert or not skeleton_target.exists():
         subprocess.run(
-            ["jupyter", "nbconvert", "--to", "script", str(skeleton_path)],
+            ["jupyter", "nbconvert", "--to", convert_to, str(skeleton_path)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
         )
-    clean_jupyter_noise(skeleton_py) # Clean the boilerplate
+
+    if output_format == "py":
+        clean_jupyter_noise(skeleton_target) # Only needed for python conversion
 
     # 2. Find and convert student files
     notebooks = list(Path(submissions_dir).rglob("*.ipynb"))
@@ -53,17 +65,18 @@ def prepare_files(submissions_dir, boilerplate_dir, force_reconvert=False):
         return False
 
     for nb in tqdm(notebooks, desc="Converting & Cleaning", unit="file", leave=True):
-        target_file = nb.with_suffix('.py')
+        target_file = nb.with_suffix(target_suffix)
         if force_reconvert or not target_file.exists():
             subprocess.run(
-                ["jupyter", "nbconvert", "--to", "script", str(nb)],
+                ["jupyter", "nbconvert", "--to", convert_to, str(nb)],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
             )
-        clean_jupyter_noise(target_file) # Clean the student file
+        if output_format == "py":
+            clean_jupyter_noise(target_file) # Only needed for python conversion
         
     return True
 
-def run_detection(submissions_dir, boilerplate_dir, report_output, guarantee_t=60, noise_t=60, display_t=0.85):
+def run_detection(submissions_dir, boilerplate_dir, report_output, output_format="py", guarantee_t=60, noise_t=60, display_t=0.85):
     print("\nStep 2: Running Copydetect...")
 
     if guarantee_t < noise_t:
@@ -75,7 +88,7 @@ def run_detection(submissions_dir, boilerplate_dir, report_output, guarantee_t=6
     
     detector = CopyDetector(
         test_dirs=[submissions_dir],
-        extensions=["py"],
+        extensions=[output_format],
         guarantee_t=guarantee_t,
         noise_t=noise_t,
         display_t=display_t,
@@ -84,7 +97,7 @@ def run_detection(submissions_dir, boilerplate_dir, report_output, guarantee_t=6
     
     # EXPLICITLY LOAD BOILERPLATE (Bulletproof method)
     added_boilerplates = 0
-    for b_file in Path(boilerplate_dir).rglob("*.py"):
+    for b_file in Path(boilerplate_dir).rglob(f"*.{output_format}"):
         detector.add_file(str(b_file), "boilerplate")
         added_boilerplates += 1
         
@@ -105,6 +118,12 @@ def parse_args():
     parser.add_argument("--submissions-dir", required=True, help="Path to the folder containing student submissions.")
     parser.add_argument("--boilerplate-dir", required=True, help="Path to the folder containing boilerplate files.")
     parser.add_argument("--report-output", required=True, help="Output report path prefix for Copydetect.")
+    parser.add_argument(
+        "--output-format",
+        choices=["py", "md"],
+        default="py",
+        help="File format used for conversion and detection (default: py)."
+    )
     parser.add_argument(
         "--guarantee-t",
         type=int,
@@ -135,12 +154,14 @@ if __name__ == "__main__":
     prepare_files(
         submissions_dir=args.submissions_dir,
         boilerplate_dir=args.boilerplate_dir,
+        output_format=args.output_format,
         force_reconvert=args.force_reconvert,
     )
     run_detection(
         submissions_dir=args.submissions_dir,
         boilerplate_dir=args.boilerplate_dir,
         report_output=args.report_output,
+        output_format=args.output_format,
         guarantee_t=args.guarantee_t,
         noise_t=args.noise_t,
         display_t=args.display_t,
