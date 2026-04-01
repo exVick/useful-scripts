@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 from copydetect import CopyDetector
+from preprocess_exercises import parse_exercise_list, preprocess_directory
 
 def clean_jupyter_noise(filepath):
     """Removes the '# In[...]:' lines that break boilerplate matching."""
@@ -111,6 +112,32 @@ def run_detection(submissions_dir, boilerplate_dir, report_output, output_format
     print(f"\nFinished! Open {report_output} to see results.")
 
 
+def preprocess_before_detection(submissions_dir, boilerplate_dir, output_format, keep_exercises_arg):
+    if not keep_exercises_arg:
+        print("Step 1.5: Preprocessing skipped (no --keep-exercises provided).")
+        return
+
+    keep_exercises = parse_exercise_list(keep_exercises_arg)
+    selected = ", ".join(str(x) for x in sorted(keep_exercises))
+    print(f"Step 1.5: Keeping exercises [{selected}] in .{output_format} files...")
+
+    submissions_result = preprocess_directory(submissions_dir, output_format, keep_exercises)
+    boilerplate_result = preprocess_directory(boilerplate_dir, output_format, keep_exercises)
+
+    print(
+        "--> Submissions preprocessing: "
+        f"processed={submissions_result['processed']}, "
+        f"changed={submissions_result['changed']}, "
+        f"without_headers={submissions_result['without_headers']}"
+    )
+    print(
+        "--> Boilerplate preprocessing: "
+        f"processed={boilerplate_result['processed']}, "
+        f"changed={boilerplate_result['changed']}, "
+        f"without_headers={boilerplate_result['without_headers']}"
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Convert notebooks to Python and run plagiarism detection with Copydetect."
@@ -123,6 +150,11 @@ def parse_args():
         choices=["py", "md"],
         default="py",
         help="File format used for conversion and detection (default: py)."
+    )
+    parser.add_argument(
+        "--keep-exercises",
+        default="",
+        help="Comma-separated exercise numbers to keep before detection (example: 1,4)."
     )
     parser.add_argument(
         "--guarantee-t",
@@ -156,6 +188,12 @@ if __name__ == "__main__":
         boilerplate_dir=args.boilerplate_dir,
         output_format=args.output_format,
         force_reconvert=args.force_reconvert,
+    )
+    preprocess_before_detection(
+        submissions_dir=args.submissions_dir,
+        boilerplate_dir=args.boilerplate_dir,
+        output_format=args.output_format,
+        keep_exercises_arg=args.keep_exercises,
     )
     run_detection(
         submissions_dir=args.submissions_dir,
