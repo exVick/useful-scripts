@@ -95,7 +95,7 @@ def run_detection(submissions_dir, boilerplate_dir, report_output, guarantee_t=6
         
     detector.run()
     detector.generate_html_report() 
-    print(f"\nFinished! Open {report_output}.html to see results.")
+    print(f"\nFinished! Open {report_output} to see results.")
 
 
 def parse_args():
