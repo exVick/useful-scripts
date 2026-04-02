@@ -81,6 +81,78 @@ def preprocess_directory(target_dir, extension, keep_exercises):
     }
 
 
+def subtract_boilerplate_from_submissions(submissions_dir, boilerplate_dir, extension):
+    ext = extension.lstrip(".").lower()
+    boilerplate_files = list(Path(boilerplate_dir).rglob(f"*.{ext}"))
+    submission_files = list(Path(submissions_dir).rglob(f"*.{ext}"))
+
+    boilerplate_chunks = []
+    boilerplate_line_set = set()
+
+    for b_path in boilerplate_files:
+        text = b_path.read_text(encoding="utf-8")
+        if text.strip():
+            boilerplate_chunks.append(text)
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped:
+                    boilerplate_line_set.add(stripped)
+
+    if not boilerplate_chunks:
+        return {
+            "processed": 0,
+            "changed": 0,
+            "chunk_replacements": 0,
+            "line_replacements": 0,
+            "boilerplate_files": len(boilerplate_files),
+            "submission_files": len(submission_files),
+            "extension": ext,
+        }
+
+    processed = 0
+    changed = 0
+    total_chunk_replacements = 0
+    total_line_replacements = 0
+
+    for s_path in submission_files:
+        original = s_path.read_text(encoding="utf-8")
+        updated = original
+        chunk_replacements = 0
+
+        for chunk in boilerplate_chunks:
+            if chunk in updated:
+                updated = updated.replace(chunk, "\n")
+                chunk_replacements += 1
+
+        kept_lines = []
+        line_replacements = 0
+        for line in updated.splitlines(keepends=True):
+            if line.strip() in boilerplate_line_set:
+                line_replacements += 1
+                continue
+            kept_lines.append(line)
+
+        updated = "".join(kept_lines)
+
+        processed += 1
+        total_chunk_replacements += chunk_replacements
+        total_line_replacements += line_replacements
+
+        if updated != original:
+            s_path.write_text(updated, encoding="utf-8")
+            changed += 1
+
+    return {
+        "processed": processed,
+        "changed": changed,
+        "chunk_replacements": total_chunk_replacements,
+        "line_replacements": total_line_replacements,
+        "boilerplate_files": len(boilerplate_files),
+        "submission_files": len(submission_files),
+        "extension": ext,
+    }
+
+
 def build_arg_parser():
     parser = argparse.ArgumentParser(
         description="Keep only selected exercise blocks in converted files."

@@ -6,7 +6,11 @@ import argparse
 from pathlib import Path
 from tqdm import tqdm
 from copydetect import CopyDetector
-from preprocess_exercises import parse_exercise_list, preprocess_directory
+from preprocess_exercises import (
+    parse_exercise_list,
+    preprocess_directory,
+    subtract_boilerplate_from_submissions,
+)
 
 def clean_jupyter_noise(filepath):
     """Removes the '# In[...]:' lines that break boilerplate matching."""
@@ -77,7 +81,16 @@ def prepare_files(submissions_dir, boilerplate_dir, output_format="py", force_re
         
     return True
 
-def run_detection(submissions_dir, boilerplate_dir, report_output, output_format="py", guarantee_t=60, noise_t=60, display_t=0.85):
+def run_detection(
+    submissions_dir,
+    boilerplate_dir,
+    report_output,
+    output_format="py",
+    guarantee_t=60,
+    noise_t=60,
+    display_t=0.85,
+    include_boilerplate=True,
+):
     print("\nStep 2: Running Copydetect...")
 
     if guarantee_t < noise_t:
@@ -96,16 +109,19 @@ def run_detection(submissions_dir, boilerplate_dir, report_output, output_format
         out_file=report_output
     )
     
-    # EXPLICITLY LOAD BOILERPLATE (Bulletproof method)
-    added_boilerplates = 0
-    for b_file in Path(boilerplate_dir).rglob(f"*.{output_format}"):
-        detector.add_file(str(b_file), "boilerplate")
-        added_boilerplates += 1
-        
-    print(f"--> Loaded {added_boilerplates} boilerplate file(s).")
-    if added_boilerplates == 0:
-        print("CRITICAL WARNING: No boilerplate loaded! Check your folder paths.")
-        sys.exit(1)
+    if include_boilerplate:
+        # EXPLICITLY LOAD BOILERPLATE (Bulletproof method)
+        added_boilerplates = 0
+        for b_file in Path(boilerplate_dir).rglob(f"*.{output_format}"):
+            detector.add_file(str(b_file), "boilerplate")
+            added_boilerplates += 1
+
+        print(f"--> Loaded {added_boilerplates} boilerplate file(s).")
+        if added_boilerplates == 0:
+            print("CRITICAL WARNING: No boilerplate loaded! Check your folder paths.")
+            sys.exit(1)
+    else:
+        print("--> Boilerplate loading disabled because subtraction mode is enabled.")
         
     detector.run()
     detector.generate_html_report() 
@@ -138,6 +154,31 @@ def preprocess_before_detection(submissions_dir, boilerplate_dir, output_format,
     )
 
 
+def subtract_boilerplate_before_detection(submissions_dir, boilerplate_dir, output_format, subtract_boilerplate):
+    if not subtract_boilerplate:
+        print("Step 1.6: Boilerplate subtraction skipped.")
+        return
+
+    print(f"Step 1.6: Subtracting boilerplate content from .{output_format} submission files...")
+    result = subtract_boilerplate_from_submissions(
+        submissions_dir=submissions_dir,
+        boilerplate_dir=boilerplate_dir,
+        extension=output_format,
+    )
+
+    if result["boilerplate_files"] == 0:
+        print("ERROR: No converted boilerplate files found for subtraction.")
+        sys.exit(1)
+
+    print(
+        "--> Subtraction result: "
+        f"processed={result['processed']}, "
+        f"changed={result['changed']}, "
+        f"chunk_replacements={result['chunk_replacements']}, "
+        f"line_replacements={result['line_replacements']}"
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Convert notebooks to Python and run plagiarism detection with Copydetect."
@@ -155,6 +196,11 @@ def parse_args():
         "--keep-exercises",
         default="",
         help="Comma-separated exercise numbers to keep before detection (example: 1,4)."
+    )
+    parser.add_argument(
+        "--subtract-boilerplate",
+        action="store_true",
+        help="Subtract boilerplate content from submissions before detection. Disabled by default."
     )
     parser.add_argument(
         "--guarantee-t",
@@ -195,6 +241,12 @@ if __name__ == "__main__":
         output_format=args.output_format,
         keep_exercises_arg=args.keep_exercises,
     )
+    subtract_boilerplate_before_detection(
+        submissions_dir=args.submissions_dir,
+        boilerplate_dir=args.boilerplate_dir,
+        output_format=args.output_format,
+        subtract_boilerplate=args.subtract_boilerplate,
+    )
     run_detection(
         submissions_dir=args.submissions_dir,
         boilerplate_dir=args.boilerplate_dir,
@@ -203,4 +255,5 @@ if __name__ == "__main__":
         guarantee_t=args.guarantee_t,
         noise_t=args.noise_t,
         display_t=args.display_t,
+        include_boilerplate=not args.subtract_boilerplate,
     )
