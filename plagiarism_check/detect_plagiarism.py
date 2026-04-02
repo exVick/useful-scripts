@@ -28,9 +28,9 @@ def clean_jupyter_noise(filepath):
 
 def prepare_files(submissions_dir, boilerplate_dir, output_format="py", force_reconvert=False):
     if output_format == "md":
-        print(f"Step 1: Converting Notebooks to Markdown {'(FORCE MODE)' if force_reconvert else '(Skipping existing)'}...")
+        print(f"Step 1: Converting Notebooks to Markdown{' (FORCE MODE)' if force_reconvert else ''}...")
     else:
-        print(f"Step 1: Converting Notebooks to Scripts {'(FORCE MODE)' if force_reconvert else '(Skipping existing)'}...")
+        print(f"Step 1: Converting Notebooks to Scripts{' (FORCE MODE)' if force_reconvert else ''}...")
     
     # 1. Convert and clean the skeleton file
     skeleton_notebooks = list(Path(boilerplate_dir).glob("*.ipynb"))
