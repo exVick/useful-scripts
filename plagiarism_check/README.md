@@ -41,7 +41,7 @@ Optional:
 - --subtract-boilerplate
   Removes boilerplate chunks and boilerplate lines from converted submission
   files in place. When this is enabled, Copydetect does not load boilerplate
-  files (to avoid double subtraction).
+  files (to avoid double subtraction). Usually, this works better than the boilerplate subtraction of Copydetect.
 - --guarantee-t 60
   Minimum copied characters to guarantee a match. Default: 60.
 - --noise-t 60
